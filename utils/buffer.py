@@ -63,7 +63,11 @@ class OfflineReplayBuffer:
     def load_dataset(self, dataset_name, clip=False):
         """使用 Minari 加载数据集"""
         print(f"Loading Minari dataset: {dataset_name}")
-        dataset = minari.load_dataset(dataset_name)
+        try:
+            dataset = minari.load_dataset(dataset_name)
+        except FileNotFoundError:
+            print(f"Dataset {dataset_name} not found locally, downloading...")
+            dataset = minari.load_dataset(dataset_name, download=True)
 
         # 直接遍历数据集对象本身，或者 dataset.iterate_episodes()
         for episode in dataset:
@@ -146,3 +150,21 @@ class OfflineReplayBuffer:
             torch.FloatTensor(self.s_next[ind]).to(self.device),
             torch.FloatTensor(self.done[ind]).to(self.device),
         )
+
+    def get_all_data(self):
+        return {
+            "observations": self.s[:self.size],
+            "actions": self.a[:self.size],
+            "next_observations": self.s_next[:self.size],
+            "rewards": self.r[:self.size],
+            "terminals": self.done[:self.size]
+        }
+
+    def sample_all(self):
+        return {
+            "observations": self.s[:self.size],
+            "actions": self.a[:self.size],
+            "rewards": self.r[:self.size],
+            "next_observations": self.s_next[:self.size],
+            "terminals": self.done[:self.size].astype(bool)
+        }

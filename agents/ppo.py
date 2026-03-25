@@ -16,7 +16,7 @@ class PPO:
         self.gamma = 0.99
         self.lamda = 0.95
         self.epsilon = 0.2  # 0.1
-        self.omega = 0.7  # 0.7
+        self.omega = 0.5  # 0.7
         self.K_epochs = 10  # 30
         self.entropy_coef = 0.01
 
