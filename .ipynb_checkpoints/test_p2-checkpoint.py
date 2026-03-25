@@ -45,7 +45,7 @@ def test_iql_value_correlation():
     )
 
     # 训练 50000 步用来验证有效性 (完整训练需 ~2M 步)
-    train_steps = 50000
+    train_steps = 500000
     pbar = tqdm(range(train_steps), desc="Training IQL")
     for step in pbar:
         q_loss, v_loss = iql.update(buffer)
