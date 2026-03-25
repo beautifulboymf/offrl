@@ -4,3 +4,5 @@ logs/
 checkpoints/
 utils/.ipynb_checkpoints/
 1saved_models_False/
+log/
+.ipynb_checkpoints/
