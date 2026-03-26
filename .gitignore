@@ -7,3 +7,4 @@ utils/.ipynb_checkpoints/
 log/
 .ipynb_checkpoints/
 stats/
+*.png
