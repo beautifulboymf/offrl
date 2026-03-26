@@ -26,13 +26,13 @@ class SimpleArgs:
         self.dynamics_max_epochs = 100  # 解决最新报错
         self.max_epochs_since_update = 5 # 解决上一次报错，早停机制阈值
         self.dynamics_steps = 100       # 您的测试步数
-        self.rollout_batch_size = 256
+        self.rollout_batch_size = 512
         self.dynamics_update_freq = 1
         
         # --- 日志系统所需的冗余参数 (KeyError 防范) ---
         # Logger.make_log_dirs 会遍历这些键来生成实验标识
         self.penalty_coef = 1.0
-        self.rollout_length = 1
+        self.rollout_length = 1000
         self.real_ratio = 0.05
         self.gamma = 0.99
         self.scale_strategy = 'dynamic'

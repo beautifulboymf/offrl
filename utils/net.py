@@ -38,6 +38,20 @@ class Actor(nn.Module):
         log_std = soft_clamp(log_std, self.log_std_bound)
         return Normal(mu, log_std.exp())
 
+    @torch.no_grad()
+    def select_action(self, s, is_sample=False):
+        """适配动力学模型 Rollout 时的动作选择接口"""
+        self.eval() # 切换到评估模式
+        dist = self.get_dist(s)
+        
+        if is_sample:
+            action = dist.sample()
+        else:
+            action = dist.mean
+            
+        self.train() # 切回训练模式，不要影响后面的 PPO 训练
+        return action.clamp(-1.0, 1.0)
+
 
 class Critic(nn.Module):
     def __init__(self, state_dim):

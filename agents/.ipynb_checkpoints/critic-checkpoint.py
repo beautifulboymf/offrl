@@ -125,3 +125,17 @@ class IQL_Q_V(nn.Module):
             return self.minQ(s, a) - self._value(s)
         else:
             return self._Q(s, a) - self._value(s)
+
+    def save(self, q_path: str, v_path: str) -> None:
+        """保存 Q 网络和 V 网络的参数"""
+        torch.save(self._Q.state_dict(), q_path)
+        torch.save(self._value.state_dict(), v_path)
+        print(f'IQL Q-function saved in {q_path}')
+        print(f'IQL Value parameters saved in {v_path}')
+
+    def load(self, q_path: str, v_path: str) -> None:
+        """加载已保存的参数并同步目标网络"""
+        self._Q.load_state_dict(torch.load(q_path, map_location=self._device))
+        self._target_Q.load_state_dict(self._Q.state_dict())
+        self._value.load_state_dict(torch.load(v_path, map_location=self._device))
+        print('IQL Q and V function parameters loaded successfully.')

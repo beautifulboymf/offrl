@@ -138,7 +138,8 @@ def train_dynamics(args, env, replay_buffer):
     return dynamics
 
 def dynamics_eval(args, policy, Q, dynamics, replay_buffer, env, mean = 0., std = 1.):
-    s, _, _, _, _, _, _, _ = replay_buffer.sample(args.rollout_batch_size)
+    # s, _, _, _, _, _, _, _ = replay_buffer.sample(args.rollout_batch_size)
+    s, _, _, _, _ = replay_buffer.sample(args.rollout_batch_size)
     #s = replay_buffer.sample_aug_state(args.rollout_batch_size)
     Q_mean, reward_mean = rollout(policy, dynamics, Q, s, args.rollout_length, args, mean, std)
     return Q_mean, reward_mean
