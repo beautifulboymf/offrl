@@ -6,37 +6,37 @@ class BC_Ensemble:
     def __init__(self, num_policies, state_dim, action_dim, device, lr=1e-4):
         self.num_policies = num_policies
         self.device = device
-        # 实例化集成中的多个 Actor
+        # Instantiate multiple Actors in the ensemble
         self.ensemble = [Actor(state_dim, action_dim).to(device) for _ in range(num_policies)]
         self.optimizers = [torch.optim.Adam(actor.parameters(), lr=lr) for actor in self.ensemble]
 
     def joint_train(self, buffer, batch_size, alpha):
-        # 适配你的 OfflineReplayBuffer.sample 输出
+        # Adapts to your OfflineReplayBuffer.sample output
         s, a, _, _, _ = buffer.sample(batch_size)
         losses = []
 
-        # 1. 预计算所有 Actor 对当前数据的 log_prob (用于多样性惩罚)
+        # 1. Pre-calculate log_prob for all Actors on current data (used for diversity penalty)
         all_log_probs = []
         with torch.no_grad():
             for actor in self.ensemble:
                 dist = actor.get_dist(s)
-                # 计算 log_prob: [batch_size, 1]
+                # Calculate log_prob: [batch_size, 1]
                 all_log_probs.append(dist.log_prob(a).sum(dim=-1, keepdim=True))
         
-        # 拼接并找到每个样本的最大 log_prob
+        # Concatenate and find the maximum log_prob for each sample
         all_log_probs_t = torch.cat(all_log_probs, dim=1) # [batch_size, num_policies]
         max_log_prob, _ = all_log_probs_t.max(dim=-1, keepdim=True)
 
-        # 2. 依次更新每个 Actor
+        # 2. Update each Actor in sequence
         for i, actor in enumerate(self.ensemble):
             dist = actor.get_dist(s)
             log_prob = dist.log_prob(a).sum(dim=-1, keepdim=True)
             
-            # 标准 BC 损失
+            # Standard BC loss
             bc_loss = -log_prob.mean()
             
-            # 论文核心：多样性惩罚项 (Disagreement Penalty)
-            # 公式: loss = bc_loss - alpha * (log_prob - max_log_prob)
+            # Paper Core: Diversity Penalty (Disagreement Penalty)
+            # Formula: loss = bc_loss - alpha * (log_prob - max_log_prob)
             penalty = (log_prob - max_log_prob.detach()).mean()
             loss = bc_loss - alpha * penalty
             
@@ -50,7 +50,7 @@ class BC_Ensemble:
 
     @torch.no_grad()
     def get_ensemble_actions(self, s):
-        """输入单个状态，获取所有 Actor 的预测均值"""
+        """Input a single state and retrieve prediction means from all Actors"""
         actions = []
         for actor in self.ensemble:
             actor.eval()

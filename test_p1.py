@@ -16,17 +16,17 @@ def test_offline_buffer():
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
-    # 直接获取总步数属性
+    # Total Steps
     total_steps = dataset.total_steps
     print(f"Total steps in dataset: {total_steps}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # 初始化 Buffer 并加载数据
+    # init Buffer and load dataset
     buffer = OfflineReplayBuffer(device, state_dim, action_dim, max_size=total_steps)
     buffer.load_dataset(dataset_name)
 
-    # 后续流程...
+    # post process...
     buffer.compute_return(gamma=0.99)
     mean, std = buffer.normalize_state()
     buffer.reward_normalize(gamma=0.99, scale_strategy="dynamic")

@@ -40,8 +40,7 @@ class Actor(nn.Module):
 
     @torch.no_grad()
     def select_action(self, s, is_sample=False):
-        """适配动力学模型 Rollout 时的动作选择接口"""
-        self.eval() # 切换到评估模式
+        self.eval()
         dist = self.get_dist(s)
         
         if is_sample:
@@ -49,7 +48,7 @@ class Actor(nn.Module):
         else:
             action = dist.mean
             
-        self.train() # 切回训练模式，不要影响后面的 PPO 训练
+        self.train()
         return action.clamp(-1.0, 1.0)
 
 

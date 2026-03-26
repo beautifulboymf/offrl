@@ -16,7 +16,7 @@ def test_iql_value_correlation():
     action_dim = env.action_space.shape[0]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # 初始化 Buffer (复用 P1 逻辑)
+    # init Buffer
     buffer = OfflineReplayBuffer(
         device, state_dim, action_dim, max_size=dataset.total_steps
     )
@@ -25,7 +25,7 @@ def test_iql_value_correlation():
     buffer.normalize_state()
     buffer.reward_normalize(gamma=0.99, scale_strategy="dynamic")
 
-    # 初始化 IQL 网络 (参数对齐 Uni-O4 Table 5)
+    # init IQL net
     iql = IQL_Q_V(
         device=device,
         state_dim=state_dim,
@@ -44,7 +44,7 @@ def test_iql_value_correlation():
         is_double_q=True,
     )
 
-    # 训练 50000 步用来验证有效性 (完整训练需 ~2M 步)
+    # train 50000 steps to verify (entire training process requires ~2M steps)
     train_steps = 50000
     pbar = tqdm(range(train_steps), desc="Training IQL")
     for step in pbar:
@@ -52,11 +52,11 @@ def test_iql_value_correlation():
         if step % 1000 == 0:
             pbar.set_postfix({"Q_loss": q_loss, "V_loss": v_loss})
 
-    # ====== 评估 V(s) 的相关性 ======
+    # ====== evaluate V(s) ======
     print("\n--- Evaluating V(s) Correlation ---")
     iql._value.eval()
 
-    # 从 Buffer 中随机抽取 5000 条数据评估
+    # random sample 5000 data points from Buffer 
     test_batch_size = 5000
     ind = np.random.randint(0, buffer.size, size=test_batch_size)
     s_test = torch.FloatTensor(buffer.s[ind]).to(device)
@@ -65,7 +65,7 @@ def test_iql_value_correlation():
     with torch.no_grad():
         pred_v = iql._value(s_test).cpu().numpy().flatten()
 
-    # 计算皮尔逊相关系数
+    # Person correlation coefficient
     correlation_matrix = np.corrcoef(pred_v, real_returns)
     pearson_r = correlation_matrix[0, 1]
 

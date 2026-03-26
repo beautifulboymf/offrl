@@ -52,7 +52,7 @@ class OfflineReplayBuffer:
         self.ptr = 0
         self.size = 0
 
-        # 分配内存
+        # allocate memory
         self.s = np.zeros((self.max_size, state_dim), dtype=np.float32)
         self.a = np.zeros((self.max_size, action_dim), dtype=np.float32)
         self.r = np.zeros((self.max_size, 1), dtype=np.float32)
@@ -61,7 +61,6 @@ class OfflineReplayBuffer:
         self.returns = np.zeros((self.max_size, 1), dtype=np.float32)
 
     def load_dataset(self, dataset_name, clip=False):
-        """使用 Minari 加载数据集"""
         print(f"Loading Minari dataset: {dataset_name}")
         try:
             dataset = minari.load_dataset(dataset_name)
@@ -69,22 +68,21 @@ class OfflineReplayBuffer:
             print(f"Dataset {dataset_name} not found locally, downloading...")
             dataset = minari.load_dataset(dataset_name, download=True)
 
-        # 直接遍历数据集对象本身，或者 dataset.iterate_episodes()
+        # Iterate directly through the dataset object or dataset.iterate_episodes()
         for episode in dataset:
-            # 状态序列长度通常比动作多 1
+            # Observation sequence length is usually 1 more than actions
             obs = episode.observations[:-1]
             next_obs = episode.observations[1:]
             actions = episode.actions
             rewards = episode.rewards.reshape(-1, 1)
 
-            # 合并终止（terminations）和截断（truncations）
+            # terminations and truncations
             dones = (episode.terminations | episode.truncations).reshape(-1, 1)
 
             if clip:
                 actions = np.clip(actions, -1.0, 1.0)
 
             ep_len = len(actions)
-            # 防止溢出
             if self.ptr + ep_len > self.max_size:
                 ep_len = self.max_size - self.ptr
                 if ep_len <= 0:
@@ -107,7 +105,7 @@ class OfflineReplayBuffer:
         print(f"Dataset loaded. Total transitions in buffer: {self.size}")
 
     def compute_return(self, gamma):
-        """计算每一步的 Return-to-go，用于价值函数的初始估计和缩放"""
+        """Calculates Step-by-step Return-to-go for initial value function estimation and scaling"""
         print("Computing returns...")
         curr_ret = 0.0
         for i in reversed(range(self.size)):
@@ -115,21 +113,23 @@ class OfflineReplayBuffer:
             self.returns[i][0] = curr_ret
 
     def reward_normalize(self, gamma, scale_strategy="dynamic"):
-        """按照 Uni-O4 的设定，根据 Return 的标准差等进行 Reward 缩放"""
         if scale_strategy == "normal":
             std = self.r[: self.size].std() + 1e-5
             self.r[: self.size] = (
                 self.r[: self.size] - self.r[: self.size].mean()
             ) / std
         elif scale_strategy == "dynamic":
-            # 基于回报的绝对最大值进行缩放 (一种简化的动态缩放策略)
+            # Scale based on the absolute maximum of returns (a simplified dynamic scaling strategy)
             max_ret = np.abs(self.returns[: self.size]).max()
             if max_ret > 0:
                 self.r[: self.size] /= max_ret + 1e-5
                 self.returns[: self.size] /= max_ret + 1e-5
 
     def normalize_state(self):
-        """状态归一化：提取均值和方差，并应用到已有数据。返回均值和标准差供在线环境使用"""
+        """
+        State Normalization: Extracts mean and variance, then applies them to existing data. 
+        Returns mean and std for online environment use.
+        """
         print("Normalizing states...")
         mean = self.s[: self.size].mean(axis=0, keepdims=True)
         std = self.s[: self.size].std(axis=0, keepdims=True) + 1e-5
@@ -140,7 +140,7 @@ class OfflineReplayBuffer:
         return mean.flatten(), std.flatten()
 
     def sample(self, batch_size):
-        """为离线训练提供采样接口"""
+        """Sampling interface for offline training"""
         ind = np.random.randint(0, self.size, size=batch_size)
 
         return (

@@ -33,7 +33,7 @@ class IQL_Q_V(nn.Module):
         self._target_update_freq = target_update_freq
         self._total_update_step = 0
 
-        # 初始化 Q 网络
+        # Initialize Q-networks
         if is_double_q:
             self._Q = DoubleQMLP(state_dim, action_dim, q_hidden_dim, q_depth).to(
                 device
@@ -50,7 +50,7 @@ class IQL_Q_V(nn.Module):
         self._target_Q.load_state_dict(self._Q.state_dict())
         self._q_optimizer = torch.optim.Adam(self._Q.parameters(), lr=Q_lr)
 
-        # 初始化 V 网络
+        # Initialize V-network
         self._value = ValueMLP(state_dim, v_hidden_dim, v_depth).to(device)
         self._v_optimizer = torch.optim.Adam(self._value.parameters(), lr=v_lr)
 
@@ -67,11 +67,11 @@ class IQL_Q_V(nn.Module):
         return weight * (diff**2)
 
     def update(self, replay_buffer):
-        # 完美适配你的 OfflineReplayBuffer.sample 输出
+        # Perfectly compatible with your OfflineReplayBuffer.sample output
         s, a, r, s_p, done = replay_buffer.sample(self._batch_size)
         not_done = 1.0 - done
 
-        # 1. 更新 V 网络 (Expectile Regression)
+        # 1. Update V-network (Expectile Regression)
         with torch.no_grad():
             self._target_Q.eval()
             if self._is_double_q:
@@ -80,14 +80,14 @@ class IQL_Q_V(nn.Module):
                 target_q = self._target_Q(s, a)
 
         value = self._value(s)
-        # 注意：这里的 target_q - value 即优势函数 A(s,a)
+        # Note: target_q - value represents the Advantage Function A(s,a)
         value_loss = self.expectile_loss(target_q - value).mean()
 
         self._v_optimizer.zero_grad()
         value_loss.backward()
         self._v_optimizer.step()
 
-        # 2. 更新 Q 网络 (MSE Loss)
+        # 2. Update Q-network (MSE Loss)
         with torch.no_grad():
             self._value.eval()
             next_v = self._value(s_p)
@@ -107,7 +107,7 @@ class IQL_Q_V(nn.Module):
         q_loss.backward()
         self._q_optimizer.step()
 
-        # 3. 目标网络软更新
+        # 3. Target Network Soft Update
         self._total_update_step += 1
         if self._total_update_step % self._target_update_freq == 0:
             for param, target_param in zip(
@@ -120,21 +120,21 @@ class IQL_Q_V(nn.Module):
         return q_loss.item(), value_loss.item()
 
     def get_advantage(self, s, a):
-        # 在离线 PPO 阶段用来替代 GAE
+        # Used to replace GAE during the offline PPO stage
         if self._is_double_q:
             return self.minQ(s, a) - self._value(s)
         else:
             return self._Q(s, a) - self._value(s)
 
     def save(self, q_path: str, v_path: str) -> None:
-        """保存 Q 网络和 V 网络的参数"""
+        """Saves Q-network and V-network parameters"""
         torch.save(self._Q.state_dict(), q_path)
         torch.save(self._value.state_dict(), v_path)
         print(f'IQL Q-function saved in {q_path}')
         print(f'IQL Value parameters saved in {v_path}')
 
     def load(self, q_path: str, v_path: str) -> None:
-        """加载已保存的参数并同步目标网络"""
+        """Loads saved parameters and synchronizes the target network"""
         self._Q.load_state_dict(torch.load(q_path, map_location=self._device))
         self._target_Q.load_state_dict(self._Q.state_dict())
         self._value.load_state_dict(torch.load(v_path, map_location=self._device))

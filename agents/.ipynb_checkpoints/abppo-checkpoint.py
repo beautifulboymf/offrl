@@ -4,7 +4,7 @@ import copy
 from utils.net import Actor
 
 class BehaviorPPO:
-    """单个行为 PPO 优化器"""
+    """Single Behavior PPO Optimizer"""
     def __init__(self, state_dim, action_dim, device, lr, clip_ratio):
         self.device = device
         self.clip_ratio = clip_ratio
@@ -28,9 +28,9 @@ class BehaviorPPO:
 
         new_log_prob = self.get_log_prob(self.policy, s, a)
         
-        # 防止 Log Prob 差异过大导致 exp() 溢出为 inf
+        # Prevent exp() overflow to inf caused by large Log Prob differences
         log_ratio = new_log_prob - old_log_prob
-        log_ratio = torch.clamp(log_ratio, min=-20.0, max=20.0) # 安全边界
+        log_ratio = torch.clamp(log_ratio, min=-20.0, max=20.0) # Safety boundary
         ratio = torch.exp(log_ratio)
 
         surr1 = ratio * adv
@@ -46,12 +46,12 @@ class BehaviorPPO:
         return loss.item()
 
     def sync_old_policy(self):
-        """当 AM-Q 评估分数提高时，用此方法替换行为策略基准"""
+        """Replaces the behavior policy baseline when AM-Q evaluation score improves"""
         self.old_policy.load_state_dict(self.policy.state_dict())
 
 
 class AdaptiveBehaviorPPO:
-    """ABPO 集成管理器"""
+    """ABPO Ensemble Manager"""
     def __init__(self, num_policies, state_dim, action_dim, device, lr=1e-4, clip_ratio=0.25, omega=0.7):
         self.num_policies = num_policies
         self.device = device
@@ -63,13 +63,13 @@ class AdaptiveBehaviorPPO:
         ]
 
     def load_bc_weights(self, bc_ensemble_net):
-        """将 P3 阶段训练好的 BC 权重加载进来作为初始策略"""
+        """Loads BC weights trained in Stage 3 as the initial policy"""
         for i in range(self.num_policies):
             self.ensemble[i].policy.load_state_dict(bc_ensemble_net.ensemble[i].state_dict())
             self.ensemble[i].sync_old_policy()
 
     def weighted_advantage(self, advantage):
-        """优势函数加权 (对应 Uni-O4 的超参 omega=0.7)"""
+        """Advantage function weighting (corresponds to Uni-O4 hyperparameter omega=0.7)"""
         if self.omega == 0.5:
             return advantage
         weight = torch.where(advantage > 0, self.omega, 1.0 - self.omega)
@@ -89,17 +89,17 @@ class AdaptiveBehaviorPPO:
                 adv = (adv - adv.mean()) / (adv.std() + 1e-8)
                 adv = self.weighted_advantage(adv)
 
-            # --- 修改：传入 current_lr ---
+            # --- Update: Passing current_lr ---
             loss = bppo.update(s, a, adv, current_clip_ratio, current_lr)
             losses.append(loss)
 
         return np.array(losses)
 
     def replace_policies(self, indices):
-        """触发多步优化：只更新评估得分超越过去的策略"""
+        """Triggers multi-step optimization: only updates policies that outperformed their previous evaluation scores"""
         for idx in indices:
             self.ensemble[idx].sync_old_policy()
             
     def get_best_policy(self, best_idx):
-        """在离线结束后，提取表现最好的策略"""
+        """Extracts the best performing policy after offline training is complete"""
         return self.ensemble[best_idx].policy

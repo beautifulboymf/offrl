@@ -10,15 +10,15 @@ from tqdm import tqdm
 from utils.net import Actor, Critic
 
 class OnlinePPOAgent:
-    def __init__(self, state_dim, action_dim, device, lr=1e-4, gamma=0.99, gae_lambda=0.95, clip_ratio=0.2):
+    def __init__(self, state_dim, action_dim, device, lr=1e-5, gamma=0.99, gae_lambda=0.95, clip_ratio=0.1):
         self.device = device
         self.gamma = gamma
         self.gae_lambda = gae_lambda
         self.clip_ratio = clip_ratio
         
-        # Actor 加载离线最优权重
+        # Actor
         self.actor = Actor(state_dim, action_dim).to(device)
-        # Critic 在线从头学习或使用 IQL 权重热启动（这里推荐从头学以适配在线分布）
+        # Critic
         self.critic = Critic(state_dim).to(device)
         
         self.optimizer = torch.optim.Adam([
@@ -46,31 +46,54 @@ class OnlinePPOAgent:
         returns = torch.FloatTensor(np.array(returns)).to(self.device)
         advantages = torch.FloatTensor(np.array(advantages)).to(self.device)
         
-        # advantage func normalization
+        # advantage normalization
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        for _ in range(10):  # each set of data run 10 steps
-            dist = self.actor.get_dist(states)
-            new_log_probs = dist.log_prob(actions).sum(dim=-1)
-            entropy = dist.entropy().sum(dim=-1).mean()
+        dataset_size = len(states)
+        batch_size = 2048  # Uni-O4: might be 2048, but we choose mini-batch to against forgetting
+
+        for _ in range(10):  # 10 个 Epoch
+            # shuffle data index
+            indices = np.random.permutation(dataset_size)
             
-            ratio = torch.exp(new_log_probs - old_log_probs)
-            # PPO Clip
-            surr1 = ratio * advantages
-            surr2 = torch.clamp(ratio, 1.0 - self.clip_ratio, 1.0 + self.clip_ratio) * advantages
-            
-            actor_loss = -torch.min(surr1, surr2).mean() - 0.01 * entropy
-            
-            current_values = self.critic(states).view(-1)
-            returns = returns.view(-1)
-            critic_loss = nn.MSELoss()(current_values, returns)
-            
-            loss = actor_loss + 0.5 * critic_loss
-            
-            self.optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
-            self.optimizer.step()
+            for start in range(0, dataset_size, batch_size):
+                end = start + batch_size
+                mb_indices = indices[start:end]
+                
+                mb_states = states[mb_indices]
+                mb_actions = actions[mb_indices]
+                mb_old_log_probs = old_log_probs[mb_indices]
+                mb_returns = returns[mb_indices]
+                mb_advantages = advantages[mb_indices]
+
+                dist = self.actor.get_dist(mb_states)
+                new_log_probs = dist.log_prob(mb_actions).sum(dim=-1)
+                entropy = dist.entropy().sum(dim=-1).mean()
+                
+                # add safe locker, avoid grad explosion under high return
+                log_ratio = new_log_probs - mb_old_log_probs
+                log_ratio = torch.clamp(log_ratio, min=-20.0, max=20.0)
+                ratio = torch.exp(log_ratio)
+                
+                # PPO Clip
+                surr1 = ratio * mb_advantages
+                surr2 = torch.clamp(ratio, 1.0 - self.clip_ratio, 1.0 + self.clip_ratio) * mb_advantages
+                actor_loss = -torch.min(surr1, surr2).mean() - 0.01 * entropy
+                
+                current_values = self.critic(mb_states).view(-1)
+                mb_returns = mb_returns.view(-1)
+                critic_loss = nn.MSELoss()(current_values, mb_returns)
+                
+                loss = actor_loss + 0.5 * critic_loss
+                
+                self.optimizer.zero_grad()
+                loss.backward()
+                
+                # Clip Actor and Critic nets' grad simutaneously
+                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
+                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
+                
+                self.optimizer.step()
 
 def evaluate(env, agent, mean, std, episodes=5):
     """evaluate temp policy"""
@@ -133,7 +156,7 @@ def main():
 
     # 3. training settings
     max_steps = 1000000       # total online steps
-    update_freq = 2048        # how many steps collected to update PPO
+    update_freq = 4096        # how many steps collected to update PPO
     eval_freq = 5000          # evaluate freq
     
     steps_log, rewards_log = [], []
